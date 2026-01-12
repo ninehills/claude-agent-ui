@@ -43,7 +43,7 @@ export default function MessageList({
         <div className="mx-auto flex w-full max-w-2xl flex-1 items-center justify-center px-4">
           <div className="w-full rounded-3xl border border-neutral-200/60 bg-white/90 px-6 py-8 text-center shadow-md shadow-neutral-200/60 dark:border-neutral-800/60 dark:bg-neutral-900/70 dark:shadow-black/30">
             <p className="text-[11px] font-semibold tracking-[0.35em] text-neutral-400 uppercase dark:text-neutral-500">
-              Claude Agent Desktop
+              Agent UI
             </p>
             <h2 className="mt-2 text-xl font-semibold text-neutral-900 dark:text-neutral-50">
               {suggestion}
