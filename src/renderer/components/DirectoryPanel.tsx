@@ -120,7 +120,7 @@ export default function DirectoryPanel({ agentDir }: DirectoryPanelProps) {
         )}
       </div>
 
-      <div className="border-b border-neutral-200 px-4 py-2 text-[11px] text-neutral-500">
+      <div className="relative z-10 border-b border-neutral-200 px-4 py-2 text-[11px] text-neutral-500">
         <div className="flex items-center gap-2">
           <label className="cursor-pointer rounded-full border border-neutral-200 px-3 py-1 text-[11px] font-semibold text-neutral-600 transition hover:border-neutral-300 hover:text-neutral-900">
             Upload
@@ -151,7 +151,7 @@ export default function DirectoryPanel({ agentDir }: DirectoryPanelProps) {
         </div>
       </div>
 
-      <div ref={containerRef} className="flex-1 overflow-hidden px-2 py-2">
+      <div ref={containerRef} className="relative z-0 flex-1 overflow-hidden px-2 py-2">
         {error && <div className="px-2 text-xs text-red-500">{error}</div>}
         {!error && !directoryInfo && (
           <div className="px-2 text-xs text-neutral-400">Loading...</div>
