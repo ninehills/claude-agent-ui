@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
+import { chatClient } from '@/api/chatClient';
 import type { ToolUse } from '@/electron';
 import type { Message, ToolInput } from '@/types/chat';
 import { parsePartialJson } from '@/utils/parsePartialJson';
@@ -15,10 +16,35 @@ export function useClaudeChat(): {
   const [isLoading, setIsLoading] = useState(false);
   const isStreamingRef = useRef(false);
   const debugMessagesRef = useRef<string[]>([]);
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  type MessageWire = Omit<Message, 'timestamp'> & { timestamp: string };
 
   useEffect(() => {
+    const unsubscribeInit = chatClient.onInit(() => {
+      seenIdsRef.current.clear();
+      setMessages([]);
+    });
+
+    const unsubscribeMessageReplay = chatClient.onMessageReplay((payload) => {
+      if (!payload?.message) {
+        return;
+      }
+      const message = payload.message as MessageWire;
+      if (seenIdsRef.current.has(message.id)) {
+        return;
+      }
+      seenIdsRef.current.add(message.id);
+      setMessages((prev) => [
+        ...prev,
+        {
+          ...message,
+          timestamp: new Date(message.timestamp)
+        }
+      ]);
+    });
+
     // Listen for streaming message chunks
-    const unsubscribeMessageChunk = window.electron.chat.onMessageChunk((chunk: string) => {
+    const unsubscribeMessageChunk = chatClient.onMessageChunk((chunk: string) => {
       setMessages((prev) => {
         const lastMessage = prev[prev.length - 1];
         // Only append if last message is from assistant AND we're actively streaming
@@ -60,6 +86,7 @@ export function useClaudeChat(): {
         }
         // Otherwise, create new assistant message and start streaming
         isStreamingRef.current = true;
+        setIsLoading(true);
         debugMessagesRef.current = []; // Clear debug accumulator for new response
         return [
           ...prev,
@@ -74,48 +101,47 @@ export function useClaudeChat(): {
     });
 
     // Listen for thinking block start
-    const unsubscribeThinkingStart = window.electron.chat.onThinkingStart(
-      (data: { index: number }) => {
-        setMessages((prev) => {
-          const lastMessage = prev[prev.length - 1];
-          const thinkingBlock = {
-            type: 'thinking' as const,
-            thinking: '',
-            thinkingStreamIndex: data.index,
-            thinkingStartedAt: Date.now()
-          };
+    const unsubscribeThinkingStart = chatClient.onThinkingStart((data: { index: number }) => {
+      setMessages((prev) => {
+        const lastMessage = prev[prev.length - 1];
+        const thinkingBlock = {
+          type: 'thinking' as const,
+          thinking: '',
+          thinkingStreamIndex: data.index,
+          thinkingStartedAt: Date.now()
+        };
 
-          if (lastMessage && lastMessage.role === 'assistant') {
-            const content = lastMessage.content;
-            const contentArray =
-              typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
-            return [
-              ...prev.slice(0, -1),
-              {
-                ...lastMessage,
-                content: [...contentArray, thinkingBlock]
-              }
-            ];
-          }
-
-          // No existing assistant message – start a new one so thinking can render
-          isStreamingRef.current = true;
-          debugMessagesRef.current = []; // Clear debug accumulator for new response
+        if (lastMessage && lastMessage.role === 'assistant') {
+          const content = lastMessage.content;
+          const contentArray =
+            typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
           return [
-            ...prev,
+            ...prev.slice(0, -1),
             {
-              id: Date.now().toString(),
-              role: 'assistant',
-              content: [thinkingBlock],
-              timestamp: new Date()
+              ...lastMessage,
+              content: [...contentArray, thinkingBlock]
             }
           ];
-        });
-      }
-    );
+        }
+
+        // No existing assistant message – start a new one so thinking can render
+        isStreamingRef.current = true;
+        setIsLoading(true);
+        debugMessagesRef.current = []; // Clear debug accumulator for new response
+        return [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: [thinkingBlock],
+            timestamp: new Date()
+          }
+        ];
+      });
+    });
 
     // Listen for thinking chunk deltas
-    const unsubscribeThinkingChunk = window.electron.chat.onThinkingChunk(
+    const unsubscribeThinkingChunk = chatClient.onThinkingChunk(
       (data: { index: number; delta: string }) => {
         setMessages((prev) => {
           const lastMessage = prev[prev.length - 1];
@@ -160,7 +186,7 @@ export function useClaudeChat(): {
     );
 
     // Listen for tool use start
-    const unsubscribeToolUseStart = window.electron.chat.onToolUseStart((tool: ToolUse) => {
+    const unsubscribeToolUseStart = chatClient.onToolUseStart((tool: ToolUse) => {
       setMessages((prev) => {
         const lastMessage = prev[prev.length - 1];
         const toolBlock = {
@@ -187,6 +213,7 @@ export function useClaudeChat(): {
 
         // No existing assistant message – start a new one so the tool can render
         isStreamingRef.current = true;
+        setIsLoading(true);
         debugMessagesRef.current = []; // Clear debug accumulator for new response
         return [
           ...prev,
@@ -201,7 +228,7 @@ export function useClaudeChat(): {
     });
 
     // Listen for tool input deltas - accumulate the raw string and attempt incremental parsing
-    const unsubscribeToolInputDelta = window.electron.chat.onToolInputDelta(
+    const unsubscribeToolInputDelta = chatClient.onToolInputDelta(
       (data: { index: number; toolId: string; delta: string }) => {
         setMessages((prev) => {
           const lastMessage = prev[prev.length - 1];
@@ -252,7 +279,7 @@ export function useClaudeChat(): {
     );
 
     // Listen for content block stop - parse the accumulated inputJson or mark thinking complete
-    const unsubscribeContentBlockStop = window.electron.chat.onContentBlockStop(
+    const unsubscribeContentBlockStop = chatClient.onContentBlockStop(
       (data: { index: number; toolId?: string }) => {
         setMessages((prev) => {
           const lastMessage = prev[prev.length - 1];
@@ -345,7 +372,7 @@ export function useClaudeChat(): {
     );
 
     // Listen for tool result start
-    const unsubscribeToolResultStart = window.electron.chat.onToolResultStart(
+    const unsubscribeToolResultStart = chatClient.onToolResultStart(
       (data: { toolUseId: string; content: string; isError: boolean }) => {
         setMessages((prev) => {
           const lastMessage = prev[prev.length - 1];
@@ -388,7 +415,7 @@ export function useClaudeChat(): {
     );
 
     // Listen for tool result deltas
-    const unsubscribeToolResultDelta = window.electron.chat.onToolResultDelta(
+    const unsubscribeToolResultDelta = chatClient.onToolResultDelta(
       (data: { toolUseId: string; delta: string }) => {
         setMessages((prev) => {
           const lastMessage = prev[prev.length - 1];
@@ -430,7 +457,7 @@ export function useClaudeChat(): {
     );
 
     // Listen for tool result complete
-    const unsubscribeToolResultComplete = window.electron.chat.onToolResultComplete(
+    const unsubscribeToolResultComplete = chatClient.onToolResultComplete(
       (data: { toolUseId: string; content: string; isError?: boolean }) => {
         setMessages((prev) => {
           const lastMessage = prev[prev.length - 1];
@@ -473,7 +500,7 @@ export function useClaudeChat(): {
     );
 
     // Listen for message completion
-    const unsubscribeMessageComplete = window.electron.chat.onMessageComplete(() => {
+    const unsubscribeMessageComplete = chatClient.onMessageComplete(() => {
       isStreamingRef.current = false;
       setIsLoading(false);
 
@@ -528,7 +555,7 @@ export function useClaudeChat(): {
       }
     });
 
-    const unsubscribeMessageStopped = window.electron.chat.onMessageStopped(() => {
+    const unsubscribeMessageStopped = chatClient.onMessageStopped(() => {
       isStreamingRef.current = false;
       setIsLoading(false);
 
@@ -598,7 +625,7 @@ export function useClaudeChat(): {
     });
 
     // Listen for errors
-    const unsubscribeMessageError = window.electron.chat.onMessageError((error: string) => {
+    const unsubscribeMessageError = chatClient.onMessageError((error: string) => {
       isStreamingRef.current = false;
 
       // Append all accumulated debug messages when error occurs
@@ -654,7 +681,7 @@ export function useClaudeChat(): {
 
     // Listen for debug messages (stderr from Claude Code process)
     // Accumulate debug messages during streaming - they'll be appended when response completes
-    const unsubscribeDebugMessage = window.electron.chat.onDebugMessage((message: string) => {
+    const unsubscribeDebugMessage = chatClient.onDebugMessage((message: string) => {
       // Only accumulate if we're actively streaming
       if (isStreamingRef.current) {
         debugMessagesRef.current.push(message);
@@ -663,6 +690,8 @@ export function useClaudeChat(): {
 
     // Cleanup function to remove all event listeners
     return () => {
+      unsubscribeInit();
+      unsubscribeMessageReplay();
       unsubscribeMessageChunk();
       unsubscribeThinkingStart();
       unsubscribeThinkingChunk();

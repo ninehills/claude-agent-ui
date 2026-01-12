@@ -8,9 +8,14 @@
   "packageManager": "bun@1.3.2",
   "scripts": {
     "dev": "node scripts/preDev.js && electron-vite dev",
+    "dev:web": "vite",
+    "dev:single": "bun run build:web --watch & bun run server",
     "build": "electron-vite build",
+    "build:web": "vite build",
     "build:mac": "bun run build && electron-builder --mac --publish always",
     "build:win": "bun run build && electron-builder --win --publish always",
+    "server": "bun src/server/index.ts",
+    "start": "bun run build:web && bun run server",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --cache --cache-location .eslintcache --max-warnings=0",
     "test": "bun test",
@@ -22,6 +27,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.1.51",
     "lucide-react": "^0.554.0",
     "react": "^19.2.0",
+    "react-arborist": "^3.4.3",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"

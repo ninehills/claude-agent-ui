@@ -1,21 +1,20 @@
-# Claude Agent Desktop
+# Claude Agent Web UI
 
-Electron desktop application for agentic chat with the Claude Agent SDK.
+Browser-based UI + Bun HTTP/SSE server for agentic chat with the Claude Agent SDK.
 
 ## Technology
 
-- **Framework:** Electron 39 (main / preload / renderer)
-- **Build:** Vite 7 via electron-vite
+- **Server:** Bun (HTTP + SSE)
 - **UI:** React 19 + TypeScript, Tailwind CSS 4
+- **Build:** Vite 7 (web) + electron-vite (legacy)
 - **Runtime:** Bun (package manager, scripts, tests)
 
 ## Layout
 
 ```
 src/
-├── main/       # Electron main process (app lifecycle + IPC handlers)
-├── preload/    # Context bridge exposing safe IPC APIs
-├── renderer/   # React UI
+├── server/     # Bun HTTP/SSE server + agent session manager
+├── renderer/   # React Web UI
 └── shared/     # Types shared between processes
 .claude/        # Claude Agent SDK skills compiled into the app bundle
 resources/      # Bundled runtime binaries (bun, uv, etc.)
@@ -32,14 +31,14 @@ static/         # Icons and static assets
 - `scripts/preDev.js` runs before `bun run dev` to download runtime binaries and build skills.
 - `scripts/beforeBuild.js` runs during production builds to download binaries, copy runtime deps to `out/node_modules`, and build skills.
 - `scripts/afterPack.js` trims unused vendor assets and confirms `.claude/skills` are present.
-- On launch, `src/main/lib/config.ts` syncs the bundled `.claude` directory into the workspace so skills are available at runtime.
+- The server uses the current workspace and `.claude` skills as provided by build scripts.
 
 ### Adding a skill
 
 1. Create `.claude/skills/<skill-name>/SKILL.md` with `name` + `description`.
 2. Add TypeScript tools under `.claude/skills/<skill-name>/scripts/`.
 3. Run `bun run dev` (or rerun `scripts/buildSkills.js`) to compile binaries into `out/.claude/skills/`.
-4. Launch the app; the workspace `.claude` folder will be refreshed automatically.
+4. Start the server; the workspace `.claude` folder will be used at runtime.
 
 ## Commands
 
@@ -49,14 +48,19 @@ bun run typecheck # TypeScript checks
 bun run lint      # ESLint
 bun run test      # Bun tests
 bun run format    # Prettier
+bun run server    # Start Bun HTTP/SSE server
+bun run dev:web   # Start Vite dev server for Web UI
+bun run build:web # Build Web UI into dist/
+bun run start     # Build Web UI and start server (single port)
+bun run dev:single # Build Web UI in watch mode and start server (single port)
 ```
 
 ## Defaults
 
-- Workspace defaults to `~/Desktop/claude-agent` (change in Settings).
-- Anthropic API key can be provided via `ANTHROPIC_API_KEY` or stored locally in Settings.
-- Bundled tools: bun + uv for runtime execution, portable Git/MSYS2 for Windows.
-- Auto-updates: packaged builds check GitHub releases for updates; set `UPDATE_FEED_URL` to override the feed if needed (e.g., staging).
+- Agent directory is required and passed via `--agent-dir` on server start.
+- Initial prompt is optional via `--prompt`.
+- Anthropic API key is provided via `ANTHROPIC_API_KEY`.
+- Server listens on port 3000 by default; override with `--port`.
 
 ## Workflow
 

@@ -19,5 +19,11 @@
       "@/*": ["./src/renderer/*"]
     }
   },
-  "include": ["src/**/*", "scripts/**/*.js", ".claude/skills/**/*.ts", "electron.vite.config.ts"]
+  "include": [
+    "src/**/*",
+    "scripts/**/*.js",
+    ".claude/skills/**/*.ts",
+    "electron.vite.config.ts",
+    "vite.config.ts"
+  ]
 }

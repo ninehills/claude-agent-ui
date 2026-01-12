@@ -1,47 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import UpdateCheckFeedback from '@/components/UpdateCheckFeedback';
-import UpdateNotification from '@/components/UpdateNotification';
-import UpdateReadyBanner from '@/components/UpdateReadyBanner';
+import { connectSse } from '@/api/sseClient';
+import { useAgentState } from '@/hooks/useAgentState';
 import Chat from '@/pages/Chat';
-import Settings from '@/pages/Settings';
+import Start from '@/pages/Start';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'home' | 'settings'>('home');
-  const currentViewRef = useRef<'home' | 'settings'>('home');
+  const { agentDir, sessionState, hasInitialPrompt } = useAgentState();
+  const [manualStart, setManualStart] = useState(false);
 
   useEffect(() => {
-    // Update ref whenever currentView changes
-    currentViewRef.current = currentView;
-  }, [currentView]);
-
-  useEffect(() => {
-    // Listen for navigation events from main process
-    const unsubscribeNavigate = window.electron.onNavigate((view: string) => {
-      // If navigating to settings and already on settings, toggle back to home
-      if (view === 'settings' && currentViewRef.current === 'settings') {
-        setCurrentView('home');
-      } else {
-        setCurrentView(view as 'home' | 'settings');
-      }
-    });
-
-    return () => {
-      unsubscribeNavigate();
-    };
+    connectSse();
   }, []);
 
-  return (
-    <>
-      <UpdateCheckFeedback />
-      <UpdateNotification />
-      <UpdateReadyBanner />
-      <div className={currentView === 'settings' ? 'block' : 'hidden'}>
-        <Settings onBack={() => setCurrentView('home')} />
-      </div>
-      <div className={currentView === 'home' ? 'block' : 'hidden'}>
-        <Chat />
-      </div>
-    </>
-  );
+  const shouldShowStart = !hasInitialPrompt && sessionState === 'idle' && !manualStart;
+
+  if (shouldShowStart) {
+    return <Start onStarted={() => setManualStart(true)} />;
+  }
+
+  return <Chat agentDir={agentDir} sessionState={sessionState} />;
 }
