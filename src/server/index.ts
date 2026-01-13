@@ -59,6 +59,57 @@ function resolveAgentPath(root: string, relativePath: string): string | null {
   return resolved;
 }
 
+const TEXT_EXTENSIONS = new Set([
+  'md',
+  'markdown',
+  'txt',
+  'json',
+  'yaml',
+  'yml',
+  'log',
+  'csv',
+  'ts',
+  'tsx',
+  'js',
+  'jsx',
+  'css',
+  'html',
+  'htm',
+  'xml',
+  'svg',
+  'env',
+  'toml',
+  'ini',
+  'conf',
+  'sh',
+  'py',
+  'java',
+  'go',
+  'rs',
+  'rb',
+  'php',
+  'c',
+  'cpp',
+  'h',
+  'hpp',
+  'sql',
+  'graphql',
+  'gql'
+]);
+
+function isPreviewableText(name: string, mimeType: string | undefined): boolean {
+  if (mimeType) {
+    if (mimeType.startsWith('text/')) {
+      return true;
+    }
+    if (['application/json', 'application/xml', 'application/x-yaml'].includes(mimeType)) {
+      return true;
+    }
+  }
+  const extension = name.toLowerCase().split('.').pop() ?? '';
+  return TEXT_EXTENSIONS.has(extension);
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -180,6 +231,39 @@ async function main() {
             'Content-Disposition': `attachment; filename="${name}"`
           }
         });
+      }
+
+      if (pathname === '/agent/file' && request.method === 'GET') {
+        const relativePath = url.searchParams.get('path') ?? '';
+        if (!relativePath) {
+          return jsonResponse({ error: 'Missing path.' }, 400);
+        }
+        const resolvedPath = resolveAgentPath(resolvedAgentDir, relativePath);
+        if (!resolvedPath) {
+          return jsonResponse({ error: 'Invalid path.' }, 400);
+        }
+        const file = Bun.file(resolvedPath);
+        if (!(await file.exists())) {
+          return jsonResponse({ error: 'File not found.' }, 404);
+        }
+        const name = basename(resolvedPath);
+        if (!isPreviewableText(name, file.type)) {
+          return jsonResponse({ error: 'File type not supported.' }, 415);
+        }
+        const size = file.size;
+        const maxSize = 512 * 1024;
+        if (size > maxSize) {
+          return jsonResponse({ error: 'File too large to preview.' }, 413);
+        }
+        try {
+          const content = await file.text();
+          return jsonResponse({ content, name, size });
+        } catch (error) {
+          return jsonResponse(
+            { error: error instanceof Error ? error.message : 'Failed to read file.' },
+            500
+          );
+        }
       }
 
       if (pathname === '/agent/upload' && request.method === 'POST') {

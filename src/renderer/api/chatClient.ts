@@ -42,6 +42,10 @@ export type ChatStatusPayload = {
   sessionState: 'idle' | 'running' | 'error';
 };
 
+export type ChatAgentErrorPayload = {
+  message: string;
+};
+
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
     method: 'POST',
@@ -104,5 +108,7 @@ export const chatClient = {
     }) => void
   ) => onEvent('chat:subagent-tool-result-complete', callback),
   onLogsSnapshot: (callback: (data: { lines: string[] }) => void) => onEvent('chat:logs', callback),
-  onLog: (callback: (line: string) => void) => onEvent('chat:log', callback)
+  onLog: (callback: (line: string) => void) => onEvent('chat:log', callback),
+  onAgentError: (callback: (payload: ChatAgentErrorPayload) => void) =>
+    onEvent('chat:agent-error', callback)
 };

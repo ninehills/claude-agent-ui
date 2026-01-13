@@ -616,6 +616,45 @@ function appendLogLine(line: string): void {
   broadcast('chat:log', line);
 }
 
+function extractAgentErrorFromContent(content: unknown): string | null {
+  const text = formatAssistantContent(content);
+  if (!text) {
+    return null;
+  }
+  if (/api error|authentication_error|unauthorized|forbidden/i.test(text)) {
+    return text;
+  }
+  return null;
+}
+
+function extractAgentError(sdkMessage: unknown): string | null {
+  if (!sdkMessage || typeof sdkMessage !== 'object') {
+    return null;
+  }
+  const candidate = (sdkMessage as { error?: unknown }).error;
+  if (candidate) {
+    if (typeof candidate === 'string') {
+      return candidate;
+    }
+    try {
+      return JSON.stringify(candidate);
+    } catch {
+      return String(candidate);
+    }
+  }
+
+  if (
+    'type' in sdkMessage &&
+    (sdkMessage as { type?: string }).type === 'assistant' &&
+    'message' in sdkMessage
+  ) {
+    const assistantMessage = (sdkMessage as { message?: { content?: unknown } }).message;
+    return extractAgentErrorFromContent(assistantMessage?.content);
+  }
+
+  return null;
+}
+
 export function getAgentState(): {
   agentDir: string;
   sessionState: SessionState;
@@ -763,6 +802,10 @@ async function startStreamingSession(): Promise<void> {
         appendLogLine(line);
       } catch (error) {
         console.log('[agent][sdk] (unserializable)', error);
+      }
+      const agentError = extractAgentError(sdkMessage);
+      if (agentError) {
+        broadcast('chat:agent-error', { message: agentError });
       }
       if (shouldAbortSession) {
         break;

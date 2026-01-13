@@ -94,7 +94,7 @@ export default function Start({ onStarted }: StartProps) {
                 type="button"
                 onClick={handleStart}
                 disabled={isSubmitting || !prompt.trim()}
-                className="rounded-full bg-[var(--ink)] px-6 py-2 text-[11px] font-semibold tracking-[0.2em] text-[var(--paper-strong)] uppercase transition hover:translate-y-[-1px] hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:bg-[var(--paper-contrast)] disabled:text-[var(--ink-muted)]"
+                className="action-button bg-[var(--ink)] px-6 py-2 text-[11px] font-semibold tracking-[0.2em] text-[var(--paper-strong)] uppercase hover:bg-[var(--accent)]"
               >
                 Run
               </button>

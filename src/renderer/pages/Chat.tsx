@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { chatClient } from '@/api/chatClient';
 import DirectoryPanel from '@/components/DirectoryPanel';
@@ -16,9 +17,24 @@ interface ChatProps {
 export default function Chat({ agentDir, sessionState }: ChatProps) {
   const [inputValue, setInputValue] = useState('');
   const [showLogs, setShowLogs] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
   const { messages, setMessages, isLoading, setIsLoading } = useClaudeChat();
   const logs = useAgentLogs();
   const messagesContainerRef = useAutoScroll(isLoading, messages);
+
+  useEffect(() => {
+    const unsubscribeInit = chatClient.onInit(() => {
+      setAgentError(null);
+    });
+    const unsubscribeError = chatClient.onAgentError((payload) => {
+      setAgentError(payload.message);
+    });
+
+    return () => {
+      unsubscribeInit();
+      unsubscribeError();
+    };
+  }, []);
 
   const handleSendMessage = async () => {
     const trimmedMessage = inputValue.trim();
@@ -71,7 +87,7 @@ export default function Chat({ agentDir, sessionState }: ChatProps) {
             <button
               type="button"
               onClick={() => setShowLogs((prev) => !prev)}
-              className="rounded-full border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-1 font-semibold text-[var(--ink)] transition hover:-translate-y-[1px] hover:border-[var(--line-strong)]"
+              className="action-button px-3 py-1 font-semibold"
             >
               {showLogs ? 'Hide logs' : 'Logs'}
             </button>
@@ -82,6 +98,24 @@ export default function Chat({ agentDir, sessionState }: ChatProps) {
         </div>
 
         <div className="flex flex-1 flex-col overflow-hidden">
+          {agentError && (
+            <div className="border-b border-[var(--line)] bg-[#f5e4d9]/80 px-4 py-3 text-[11px] text-[var(--ink)]">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 text-[var(--accent)]" />
+                <div className="flex-1">
+                  <div className="font-semibold text-[var(--ink)]">Agent error</div>
+                  <div className="mt-1 text-[11px] text-[var(--ink-muted)]">{agentError}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAgentError(null)}
+                  className="action-button px-2 py-1 text-[10px] font-semibold"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
           {showLogs && (
             <div className="border-b border-[var(--line)] bg-[var(--paper-contrast)]/70 px-4 py-3">
               <div className="mb-2 text-[11px] font-semibold tracking-[0.2em] text-[var(--ink-muted)] uppercase">

@@ -17,7 +17,8 @@ const JSON_EVENTS = new Set([
   'chat:subagent-tool-result-delta',
   'chat:subagent-tool-result-complete',
   'chat:logs',
-  'chat:status'
+  'chat:status',
+  'chat:agent-error'
 ]);
 
 const STRING_EVENTS = new Set([
