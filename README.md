@@ -44,3 +44,7 @@ docker run --rm -p 8000:8000 \
     -v $(pwd)/agent/.claude/settings.json:/home/node/claude-agent-ui/agent/.claude/settings.json \
     claude-agent-ui
 ```
+
+## Screenshot
+
+![](./example.png)
