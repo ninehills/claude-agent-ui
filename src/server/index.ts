@@ -143,6 +143,7 @@ async function main() {
 
   Bun.serve({
     port,
+    idleTimeout: 0,
     async fetch(request) {
       const url = new URL(request.url);
       const pathname = url.pathname;

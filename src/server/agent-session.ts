@@ -738,6 +738,9 @@ export async function enqueueUserMessage(text: string): Promise<void> {
   if (!trimmed) {
     return;
   }
+  if (!hasInitialPrompt) {
+    hasInitialPrompt = true;
+  }
   console.log(`[agent] enqueue user message len=${trimmed.length}`);
   setSessionState('running');
 

@@ -8,6 +8,7 @@ type SseClient = {
 
 const encoder = new TextEncoder();
 const clients = new Set<SseClient>();
+const HEARTBEAT_INTERVAL_MS = 15000;
 
 function summarizePayload(event: string, data: unknown): string {
   if (event === 'chat:message-replay' && typeof data === 'object' && data !== null) {
@@ -39,6 +40,14 @@ function formatSse(event: string, data: unknown): Uint8Array {
     lines.push(`event: ${event}`);
   }
 
+  const safeJsonStringify = (value: unknown): string => {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return JSON.stringify({ error: 'unserializable_payload' });
+    }
+  };
+
   if (data === undefined) {
     lines.push('data:');
   } else if (data === null) {
@@ -49,11 +58,15 @@ function formatSse(event: string, data: unknown): Uint8Array {
       lines.push(`data: ${part}`);
     });
   } else {
-    lines.push(`data: ${JSON.stringify(data)}`);
+    lines.push(`data: ${safeJsonStringify(data)}`);
   }
 
   lines.push('');
   return encoder.encode(`${lines.join('\n')}\n`);
+}
+
+function heartbeatChunk(): Uint8Array {
+  return encoder.encode(': ping\n\n');
 }
 
 export function broadcast(event: string, data: unknown): void {
@@ -70,6 +83,7 @@ export function createSseClient(onClose: (client: SseClient) => void): {
   let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
   let client: SseClient | null = null;
   const pending: Uint8Array[] = [];
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   const stream = new ReadableStream<Uint8Array>({
     start(nextController) {
@@ -85,6 +99,10 @@ export function createSseClient(onClose: (client: SseClient) => void): {
       if (controller) {
         controller = null;
       }
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
       if (client) {
         clients.delete(client);
         onClose(client);
@@ -97,12 +115,21 @@ export function createSseClient(onClose: (client: SseClient) => void): {
   client = {
     id: randomUUID(),
     send: (event, data) => {
-      const payload = formatSse(event, data);
-      if (!controller) {
-        pending.push(payload);
-        return;
+      try {
+        const payload = formatSse(event, data);
+        if (!controller) {
+          pending.push(payload);
+          return;
+        }
+        controller.enqueue(payload);
+      } catch {
+        if (client) {
+          clients.delete(client);
+          onClose(client);
+          console.log(`[sse] client disconnected id=${client.id} total=${clients.size}`);
+          client = null;
+        }
       }
-      controller.enqueue(payload);
     },
     close: () => {
       if (!controller) {
@@ -110,6 +137,10 @@ export function createSseClient(onClose: (client: SseClient) => void): {
       }
       controller.close();
       controller = null;
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
       if (client) {
         clients.delete(client);
         onClose(client);
@@ -122,11 +153,32 @@ export function createSseClient(onClose: (client: SseClient) => void): {
   clients.add(client);
   console.log(`[sse] client connected id=${client.id} total=${clients.size}`);
 
+  heartbeatTimer = setInterval(() => {
+    if (!controller) {
+      return;
+    }
+    try {
+      controller.enqueue(heartbeatChunk());
+    } catch {
+      if (client) {
+        clients.delete(client);
+        onClose(client);
+        console.log(`[sse] client disconnected id=${client.id} total=${clients.size}`);
+        client = null;
+      }
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+
   const response = new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive'
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no'
     }
   });
 
